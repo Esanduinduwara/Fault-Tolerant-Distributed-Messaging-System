@@ -1,24 +1,3 @@
-"""
-=============================================================================
- SHARED BY ALL MEMBERS — Configuration Module
- File: src/config/settings.py
- Owner: Member 4 (DevOps / Integration lead)
-=============================================================================
-
-PUSH SCHEDULE (Member 4 sets this up on Day 1 — ALL members depend on it)
---------------------------------------------------------------------------
-Day 1  ▸  Push the ENTIRE file — all members need this before they can import
-
-GIT COMMIT MESSAGE:
-  Day 1: "feat(config): add central settings module — all env vars in one place"
-=============================================================================
-"""
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DAY 1  ▸  MEMBER 4 pushes this FIRST — all other members need it to import
-# Central config: all connection strings and constants live here.
-# No other file ever hardcodes "localhost:9092" or "mongodb://..." directly.
-# ─────────────────────────────────────────────────────────────────────────────
 import os
 from dotenv import load_dotenv
 
