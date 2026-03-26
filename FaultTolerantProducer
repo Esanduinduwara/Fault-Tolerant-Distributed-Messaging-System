@@ -1,0 +1,55 @@
+import json
+import time
+import logging
+from datetime import datetime, timezone
+
+from dotenv import load_dotenv
+from kafka import KafkaProducer         
+from kafka.errors import KafkaError
+
+from src.config.settings import KAFKA_BOOTSTRAP_SERVERS, KAFKA_TOPIC_MESSAGES
+
+load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+class FaultTolerantProducer:
+
+
+  def __init__(self):
+        logger.info("Initialising Fault-Tolerant StreamFlow Producer ...")
+        self.dlq_file = "failed_messages_dlq.jsonl"
+        self.topic    = KAFKA_TOPIC_MESSAGES
+
+        bootstrap = [s.strip() for s in KAFKA_BOOTSTRAP_SERVERS.split(",")]
+
+  
+   
+
+        self.producer = KafkaProducer(
+            bootstrap_servers=bootstrap,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            key_serializer=lambda k: k.encode("utf-8"),
+            acks="all",       
+            retries=10,      
+            max_in_flight_requests_per_connection=5,
+            linger_ms=5,     
+
+      
+        try:
+              
+            from src.time_sync.time_synchronizer import (
+                NTPSynchronizer, HybridLogicalClock,
+            )
+            self._ntp_sync = NTPSynchronizer()
+            self._hlc      = HybridLogicalClock(ntp_sync=self._ntp_sync)
+            logger.info("HLC time synchronization initialised for producer")
+            
+        except Exception as exc:
+            logger.warning(f"HLC init failed, falling back to system time: {exc}")
+            self._ntp_sync = None
+            self._hlc      = None
