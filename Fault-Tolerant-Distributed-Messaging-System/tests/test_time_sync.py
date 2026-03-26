@@ -41,3 +41,50 @@ class TestNTPSynchronizer:
         local     = int(time.time() * 1000)
         # Corrected should be about 50ms ahead of raw local time
         assert abs(corrected - local - 50) < 100  # within 100ms tolerance
+
+        class TestLamportClock:
+
+    def test_tick_increments(self):
+        """Each tick should increment the counter by 1."""
+        from src.time_sync.time_synchronizer import LamportClock
+        clock = LamportClock()
+        assert clock.tick() == 1
+        assert clock.tick() == 2
+        assert clock.tick() == 3
+
+    def test_update_takes_max(self):
+        """Update should set counter to max(local, received) + 1."""
+        from src.time_sync.time_synchronizer import LamportClock
+        clock = LamportClock()
+        clock.tick()  # counter = 1
+        clock.tick()  # counter = 2
+        # Receive a message with timestamp 10 → counter = max(2, 10) + 1 = 11
+        result = clock.update(10)
+        assert result == 11
+
+    def test_update_when_local_is_higher(self):
+        """If local counter > received, result = local + 1."""
+        from src.time_sync.time_synchronizer import LamportClock
+        clock = LamportClock()
+        for _ in range(20):
+            clock.tick()  # counter = 20
+        result = clock.update(5)  # max(20, 5) + 1 = 21
+        assert result == 21
+
+    def test_monotonicity(self):
+        """Lamport clock should never go backward."""
+        from src.time_sync.time_synchronizer import LamportClock
+        clock = LamportClock()
+        prev = 0
+        for _ in range(100):
+            val = clock.tick()
+            assert val > prev
+            prev = val
+
+    def test_current_does_not_increment(self):
+        """Reading .current should not change the counter."""
+        from src.time_sync.time_synchronizer import LamportClock
+        clock = LamportClock()
+        clock.tick()
+        val = clock.current
+        assert val == clock.current  # reading twice gives same value

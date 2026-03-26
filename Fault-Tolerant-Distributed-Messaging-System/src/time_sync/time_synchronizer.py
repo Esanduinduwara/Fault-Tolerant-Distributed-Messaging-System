@@ -162,3 +162,56 @@ class NTPSynchronizer:
     def stop(self):
         """Stop the background sync thread."""
         self._running = False
+
+    class LamportClock:
+    """
+        Lamport Logical Clock (Leslie Lamport, 1978).
+
+        PURPOSE (Part 3: ensuring correct message ordering):
+      Physical clocks can never be perfectly synchronised.  Lamport clocks
+      provide a LOGICAL ordering guarantee:
+        If event A causally precedes event B → L(A) < L(B)
+      This means we can always determine the causal order of events,
+      even when physical timestamps are unreliable due to clock skew.
+
+    RULES:
+      1. Each process maintains a counter C, initially 0
+      2. Before each local event:  C = C + 1
+      3. When sending a message:   attach C to the message
+      4. When receiving a message with timestamp T_msg:
+            C = max(C, T_msg) + 1
+
+    TRADE-OFF vs vector clocks:
+      - Lamport clocks are simpler (single integer vs vector of integers)
+      - But they cannot detect CONCURRENT events (where neither caused the other)
+      - For a messaging app this is acceptable: we only need total ordering
+    """
+
+    def __init__(self):
+        self._counter = 0
+        self._lock    = threading.Lock()
+
+    def tick(self) -> int:
+        """
+        Increment the clock for a local event (e.g. sending a message).
+        Returns the new timestamp.
+        """
+        with self._lock:
+            self._counter += 1
+            return self._counter
+
+    def update(self, received_timestamp: int) -> int:
+        """
+        Update the clock when a message is received.
+        Takes the maximum of local clock and received timestamp, then +1.
+        This ensures causal ordering is preserved across nodes.
+        """
+        with self._lock:
+            self._counter = max(self._counter, received_timestamp) + 1
+            return self._counter
+
+    @property
+    def current(self) -> int:
+        """Get the current Lamport timestamp without incrementing."""
+        with self._lock:
+            return self._counter
