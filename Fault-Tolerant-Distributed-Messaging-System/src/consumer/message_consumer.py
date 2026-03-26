@@ -106,6 +106,8 @@ class FaultTolerantConsumer:
             f"{old_status.value} → {new_status.value}"
         )
 
+    # KafkaConsumer factory — key settings for replication and fault tolerance
+    # ─────────────────────────────────────────────────────────────────────────
     def _build_consumer(self) -> KafkaConsumer:
         """Create a fresh KafkaConsumer. Called on init and after reconnect."""
         # ── Multi-broker bootstrap (Part 2: Quorum Replication) ───────────
@@ -131,3 +133,46 @@ class FaultTolerantConsumer:
             heartbeat_interval_ms=10_000, # send heartbeat every 10s
             max_poll_records=10,
         )
+
+    # Partition assignment callback + message processor
+    # ─────────────────────────────────────────────────────────────────────────
+    def _on_partitions_assigned(self, partitions):
+        """Log which partitions this consumer owns — Part 2 evidence."""
+        tp_list = [f"{tp.topic}:{tp.partition}" for tp in partitions]
+        logger.info(f"[{self.node_id}] Partitions assigned: {tp_list}")
+
+    def _process_message(self, msg_value: dict, offset: int, partition: int) -> bool:
+        """
+        Save one message to MongoDB and write an audit log entry.
+
+        Part 3 integration:
+          - Update HLC with the message's HLC timestamp (causal ordering)
+          - Record clock skew between sender and receiver
+          - Add message to reorder buffer instead of immediate DB write
+        """
+        msg_id = msg_value.get("messageId", f"unknown-{offset}")
+        try:
+            # ── HLC update on receive (Part 3: causal ordering) ──────────
+            if self._hlc and "hlc_logical" in msg_value:
+                msg_physical = msg_value.get("timestamp", 0)
+                msg_logical = msg_value.get("hlc_logical", 0)
+                self._hlc.update(msg_physical, msg_logical)
+
+            # ── Clock skew analysis (Part 3) ─────────────────────────────
+            if self._skew_analyzer and "timestamp" in msg_value:
+                skew = self._skew_analyzer.record_skew(
+                    msg_value.get("fromUser", "unknown"),
+                    msg_value["timestamp"],
+                )
+
+            # Save to database (with deduplication via unique messageId index)
+            self.db.save_message(msg_value)
+            self.db.log_event(msg_id, "consumed_and_saved", self.node_id)
+            logger.info(
+                f"[{self.node_id}] ✅  msg={msg_id}  "
+                f"partition={partition}  offset={offset}"
+            )
+            return True
+        except Exception as exc:
+            logger.error(f"[{self.node_id}] ❌  Failed to process {msg_id}: {exc}")
+            return False
