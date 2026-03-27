@@ -1,0 +1,15 @@
+import time
+import logging
+import threading
+from enum import Enum
+from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
+
+
+class NodeStatus(Enum):
+   
+    ALIVE     = "alive"
+    SUSPECTED = "suspected"
+    DEAD      = "dead"
+
