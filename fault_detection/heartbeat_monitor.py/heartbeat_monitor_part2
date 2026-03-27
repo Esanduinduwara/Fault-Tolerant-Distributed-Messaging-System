@@ -1,0 +1,67 @@
+def _monitor_loop(self):
+        """Background thread: periodically ping all registered nodes."""
+        while self._running:
+            with self._lock:
+                node_ids = list(self._nodes.keys())
+
+            for node_id in node_ids:
+                if not self._running:
+                    break
+                self._check_node(node_id)
+
+            time.sleep(self._interval)
+
+    def start(self):
+        """Start the heartbeat monitor background thread."""
+        self._running = True
+        self._thread  = threading.Thread(target=self._monitor_loop, daemon=True)
+        self._thread.start()
+        logger.info(
+            f"[HEARTBEAT] Monitor started "
+            f"(interval={self._interval}s, timeout={self._timeout}s)"
+        )
+
+    def stop(self):
+        """Stop the heartbeat monitor."""
+        self._running = False
+        logger.info("[HEARTBEAT] Monitor stopped")
+
+    def get_node_status(self, node_id: str) -> NodeStatus:
+        """Get the current status of a specific node."""
+        with self._lock:
+            node = self._nodes.get(node_id)
+            if node:
+                return node["status"]
+        return NodeStatus.DEAD  # unknown node treated as dead
+
+    def get_status_report(self) -> dict:
+        """
+        Return a full status report of all monitored nodes.
+        Used by GET /health or for operational dashboards.
+        """
+        with self._lock:
+            report = {}
+            for node_id, info in self._nodes.items():
+                report[node_id] = {
+                    "status":       info["status"].value,
+                    "last_seen":    info["last_seen"],
+                    "fail_count":   info["fail_count"],
+                    "url":          info["url"],
+                }
+        return report
+
+    def get_alive_nodes(self) -> list:
+        """Return list of node IDs that are currently ALIVE."""
+        with self._lock:
+            return [
+                nid for nid, info in self._nodes.items()
+                if info["status"] == NodeStatus.ALIVE
+            ]
+
+    def get_dead_nodes(self) -> list:
+        """Return list of node IDs that are currently DEAD."""
+        with self._lock:
+            return [
+                nid for nid, info in self._nodes.items()
+                if info["status"] == NodeStatus.DEAD
+            ]
