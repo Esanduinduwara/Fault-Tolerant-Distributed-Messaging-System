@@ -1,0 +1,88 @@
+class HeartbeatMonitor:
+    
+
+    def __init__(self, heartbeat_interval_s=5, timeout_s=15):
+        from src.config.settings import HEARTBEAT_INTERVAL_S, HEARTBEAT_TIMEOUT_S
+
+        self._interval   = heartbeat_interval_s or HEARTBEAT_INTERVAL_S
+        self._timeout    = timeout_s or HEARTBEAT_TIMEOUT_S
+        self._nodes      = {}    # node_id → {url, status, last_seen, last_checked}
+        self._lock       = threading.Lock()
+        self._running    = False
+        self._thread     = None
+        self._callbacks  = []    # list of (status, callback_fn) for notifications
+
+    def register_node(self, node_id: str, health_url: str):
+        
+        with self._lock:
+            self._nodes[node_id] = {
+                "url":          health_url,
+                "status":       NodeStatus.ALIVE,
+                "last_seen":    time.time(),
+                "last_checked": 0,
+                "fail_count":   0,
+            }
+        logger.info(f"[HEARTBEAT] Registered node: {node_id} → {health_url}")
+
+    def on_status_change(self, callback):
+        
+        self._callbacks.append(callback)
+
+    def _ping_node(self, node_id: str, health_url: str) -> bool:
+        
+        try:
+            import requests
+            response = requests.get(health_url, timeout=3)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def _check_node(self, node_id: str):
+        
+        with self._lock:
+            node = self._nodes.get(node_id)
+            if not node:
+                return
+
+        alive   = self._ping_node(node_id, node["url"])
+        now     = time.time()
+
+        with self._lock:
+            node["last_checked"] = now
+            old_status           = node["status"]
+
+            if alive:
+                node["status"]     = NodeStatus.ALIVE
+                node["last_seen"]  = now
+                node["fail_count"] = 0
+            else:
+                node["fail_count"] += 1
+                elapsed = now - node["last_seen"]
+
+                if elapsed < self._timeout:
+                    # Still within grace period — keep ALIVE
+                    node["status"] = NodeStatus.ALIVE
+                elif elapsed < self._timeout * 2:
+                    # Missed 1-2 heartbeat cycles — mark SUSPECTED
+                    node["status"] = NodeStatus.SUSPECTED
+                    logger.warning(
+                        f"[HEARTBEAT] Node {node_id} SUSPECTED "
+                        f"(no response for {elapsed:.0f}s)"
+                    )
+                else:
+                    # Missed 3+ cycles — mark DEAD
+                    node["status"] = NodeStatus.DEAD
+                    logger.error(
+                        f"[HEARTBEAT] Node {node_id} declared DEAD "
+                        f"(no response for {elapsed:.0f}s)"
+                    )
+
+            new_status = node["status"]
+
+        # Fire callbacks on status change (outside lock to avoid deadlocks)
+        if old_status != new_status:
+            for callback in self._callbacks:
+                try:
+                    callback(node_id, old_status, new_status)
+                except Exception as exc:
+                    logger.error(f"[HEARTBEAT] Callback error: {exc}")
