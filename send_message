@@ -1,0 +1,16 @@
+ def send_to_dlq(self, message_data: dict, error_reason):
+        
+        entry = {
+            "failed_at":        datetime.now(timezone.utc).isoformat(),
+            "error":            str(error_reason),
+            "original_message": message_data,
+        }
+        with open(self.dlq_file, "a") as fh:
+            fh.write(json.dumps(entry) + "\n")
+        logger.warning(
+            "Message saved to DLQ (%s): %s",
+            self.dlq_file, message_data.get("messageId"),
+        )
+
+
+        
