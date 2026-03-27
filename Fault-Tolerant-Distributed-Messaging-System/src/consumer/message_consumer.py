@@ -176,3 +176,81 @@ class FaultTolerantConsumer:
         except Exception as exc:
             logger.error(f"[{self.node_id}] ❌  Failed to process {msg_id}: {exc}")
             return False
+
+
+    # Main consumer loop with auto-reconnect on any failure
+    # ─────────────────────────────────────────────────────────────────────────
+    def start(self):
+        """Main consumer loop with automatic reconnection on failures."""
+        logger.info(
+            f"[{self.node_id}] Starting StreamFlow Consumer "
+            f"(group={KAFKA_CONSUMER_GROUP}) …"
+        )
+        self.running = True
+
+        # MEMBER 4  ▸  Leader election thread
+        self._leader_thread = threading.Thread(
+            target=self._leader_loop, daemon=True
+        )
+        self._leader_thread.start()
+
+        # MEMBER 1  ▸  Heartbeat failure detection thread
+        if self._heartbeat:
+            self._heartbeat.start()
+
+        while self.running:
+            try:
+                self.consumer = self._build_consumer()
+                self.consumer.subscribe(
+                    [KAFKA_TOPIC_MESSAGES],
+                    on_assign=lambda c, p: self._on_partitions_assigned(p),
+                )
+                logger.info(f"[{self.node_id}] Connected to Kafka. Polling …")
+
+                for message in self.consumer:
+                    if not self.running:
+                        break
+
+                    success = self._process_message(
+                        message.value, message.offset, message.partition
+                    )
+
+                    if success:
+                        # MANUAL COMMIT — only after successful DB write.
+                        # If consumer crashes here, Kafka redelivers the message.
+                        # MongoDB unique index deduplicates it on retry.
+                        self.consumer.commit()
+
+            except KafkaError as exc:
+                logger.error(
+                    f"[{self.node_id}] Kafka error: {exc}. Reconnecting in 5 s …"
+                )
+                time.sleep(5)   # wait before reconnecting
+
+            except Exception as exc:
+                logger.error(
+                    f"[{self.node_id}] Unexpected error: {exc}. Retrying in 5 s …"
+                )
+                time.sleep(5)
+
+            finally:
+                if self.consumer:
+                    try:
+                        self.consumer.close()
+                    except Exception:
+                        pass
+
+    def stop(self):
+        """Gracefully shut down the consumer and close DB connection."""
+        self.running = False
+        if self._heartbeat:
+            self._heartbeat.stop()
+        if self._ntp_sync:
+            self._ntp_sync.stop()
+        if self.consumer:
+            try:
+                self.consumer.close()
+            except Exception:
+                pass
+        self.db.close()
+        logger.info(f"[{self.node_id}] Consumer stopped.")
