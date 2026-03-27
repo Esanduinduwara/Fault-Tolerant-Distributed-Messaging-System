@@ -1,36 +1,3 @@
-"""
-=============================================================================
- MEMBER 4 — CONSENSUS & AGREEMENT ALGORITHMS (REST API layer)
- File: src/api/rest_api.py
- Grading Part 4 (20%)
-
- NOTE: Member 4 also owns the leader-election code in message_consumer.py
-       (try_acquire_leader_lock + run_leader_stats_job + _leader_loop).
-       This file is the REST API that ties all members' components together.
-=============================================================================
-
-DAILY PUSH SCHEDULE (Member 4 — REST API)
-------------------------------------------
-Day 1  →  FastAPI app init + CORS middleware + get_db() lazy accessor + Pydantic models
-Day 2  →  KafkaProducerPool connection pool + _send_to_kafka() using pool
-Day 3  →  /health (lightweight) + POST /messages + GET /messages routes
-Day 4  →  POST /users + GET /users + GET /users/{id} + GET /stats + GET /logs
-Day 5  →  /clock-skew endpoint + __main__ entry point + final Swagger test
-
-GIT COMMIT MESSAGE TEMPLATES
------------------------------
-Day 1: "feat(api): initialise FastAPI app with CORS, lazy DB accessor, and Pydantic models"
-Day 2: "feat(api): implement KafkaProducerPool singleton with lifespan hooks"
-Day 3: "feat(api): add /health, POST /messages, and GET /messages endpoints"
-Day 4: "feat(api): add user endpoints, /stats (leader job output), and /logs"
-Day 5: "feat(api): add /clock-skew endpoint and verify full Swagger UI test flow"
-=============================================================================
-"""
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DAY 1  ▸  PUSH THIS BLOCK
-# Imports + FastAPI app + CORS + lazy DB accessor + Pydantic models
-# ─────────────────────────────────────────────────────────────────────────────
 import time
 import logging
 from typing import Optional
@@ -75,13 +42,7 @@ class UserRequest(BaseModel):
     userId:   str
     username: str
     email:    str
-# ─────────────────────────────────────────────────────────────────────────────
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DAY 2  ▸  PUSH THIS BLOCK
-# KafkaProducerPool — singleton connection pool for Kafka producers
-# ─────────────────────────────────────────────────────────────────────────────
 class KafkaProducerPool:
     """
     Singleton Kafka producer connection pool.
@@ -207,13 +168,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# ─────────────────────────────────────────────────────────────────────────────
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DAY 2  ▸  PUSH THIS BLOCK (continued)
-# Kafka publish helper using the connection pool
-# ─────────────────────────────────────────────────────────────────────────────
 def _send_to_kafka(message_data: dict) -> bool:
     """
     Publish a message to Kafka using the connection pool.
@@ -235,13 +190,7 @@ def _send_to_kafka(message_data: dict) -> bool:
     # Fallback: direct MongoDB write if Kafka is completely unavailable
     get_db().save_message(message_data)
     return False
-# ─────────────────────────────────────────────────────────────────────────────
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DAY 3  ▸  PUSH THIS BLOCK
-# Health check + message send + message read endpoints
-# ─────────────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
     """
@@ -305,83 +254,6 @@ def get_conversation(user1: str, user2: str, limit: int = 50):
         "count":     len(msgs),
         "sorted_by": "timestamp_asc",  # explicit Part 3 evidence in response
     }
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DAY 4  ▸  PUSH THIS BLOCK
-# User endpoints + stats (leader job output) + logs
-# ─────────────────────────────────────────────────────────────────────────────
-@app.post("/users", status_code=201)
-def create_user(req: UserRequest):
-    """Create a new user. Returns 409 if userId or username already exists."""
-    data = req.model_dump()
-    ok   = get_db().create_user(data)
-    if not ok:
-        raise HTTPException(status_code=409, detail="User already exists")
-    return {"status": "created", "userId": data["userId"]}
-
-
-@app.get("/users")
-def list_users():
-    return {"users": get_db().get_all_users()}
-
-
-@app.get("/users/{user_id}")
-def get_user(user_id: str):
-    """Fetch a user and update their lastSeen timestamp."""
-    db   = get_db()
-    user = db.get_user(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    db.update_last_seen(user_id)
-    return user
-
-
-@app.get("/stats")
-def get_stats():
-    """
-    Return the stats computed by the leader consumer (Part 4: Consensus).
-    The leader-only job writes to system_stats every ~25 seconds.
-    If not yet computed, returns a hint to check if the consumer is running.
-    """
-    db    = get_db()
-    stats = db.db["system_stats"].find_one({"_id": "latest"}, {"_id": 0})
-    if not stats:
-        return {"message": "Stats not yet computed - is the consumer running?"}
-    return stats
-
-
-@app.get("/logs")
-def get_logs(limit: int = 50):
-    """Return the most recent system audit log entries (newest first)."""
-    return {"logs": get_db().get_logs(limit=limit)}
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DAY 5  ▸  PUSH THIS BLOCK
-# Clock skew endpoint + uvicorn entry point
-# ─────────────────────────────────────────────────────────────────────────────
-@app.get("/clock-skew")
-def get_clock_skew():
-    """
-    Return clock skew analysis report (Part 3: Time Synchronization).
-    Shows observed clock offset between this node and message senders.
-    Useful for debugging out-of-order message issues.
-    """
-    try:
-        from src.time_sync.time_synchronizer import NTPSynchronizer
-        ntp = NTPSynchronizer()
-        return {
-            "ntp_offset_ms":  ntp.offset_ms,
-            "sync_count":     ntp.sync_count,
-            "server_time_ms": ntp.get_corrected_timestamp_ms(),
-            "local_time_ms":  int(time.time() * 1000),
-        }
-    except Exception as exc:
-        return {"error": str(exc), "ntp_available": False}
-
 
 if __name__ == "__main__":
     import uvicorn
