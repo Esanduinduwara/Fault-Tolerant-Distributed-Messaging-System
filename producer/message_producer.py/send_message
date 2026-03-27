@@ -1,0 +1,27 @@
+def send_message(self, message_data: dict) -> bool:
+     
+        if self._hlc:
+            physical_ms, logical = self._hlc.tick()
+            message_data["timestamp"]  = physical_ms
+            message_data["hlc_logical"] = logical
+            message_data["hlc_encoded"] = self._hlc.encode(physical_ms, logical)
+        elif "timestamp" not in message_data:
+            message_data["timestamp"] = int(time.time() * 1000)
+
+      
+        users = sorted([message_data['fromUser'], message_data['toUser']])
+        key   = f"{users[0]}:{users[1]}"
+
+        try:
+            future = self.producer.send(self.topic, key=key, value=message_data)
+            meta   = future.get(timeout=10)
+            logger.info(
+                "Sent %s -> partition=%s offset=%s",
+                message_data.get("messageId"), meta.partition, meta.offset,
+            )
+            return True
+
+        except KafkaError as exc:
+            logger.error("Kafka error for %s: %s", message_data.get("messageId"), exc)
+            self.send_to_dlq(message_data, exc)
+            return False
