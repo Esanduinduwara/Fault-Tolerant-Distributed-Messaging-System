@@ -1,0 +1,17 @@
+def send_to_dlq(self, message_data: dict, error_reason):
+        """
+        Persist a failed message to a local JSONL file (Dead Letter Queue).
+        A recovery script can read this file later and re-publish the messages.
+        Fulfils the 'message recovery mechanism' requirement from the scenario.
+        """
+        entry = {
+            "failed_at":        datetime.now(timezone.utc).isoformat(),
+            "error":            str(error_reason),
+            "original_message": message_data,
+        }
+        with open(self.dlq_file, "a") as fh:
+            fh.write(json.dumps(entry) + "\n")
+        logger.warning(
+            "Message saved to DLQ (%s): %s",
+            self.dlq_file, message_data.get("messageId"),
+        )
