@@ -215,3 +215,115 @@ class NTPSynchronizer:
         """Get the current Lamport timestamp without incrementing."""
         with self._lock:
             return self._counter
+
+class HybridLogicalClock:
+    """
+    Hybrid Logical Clock (HLC), inspired by CockroachDB's implementation.
+
+    PURPOSE:
+      Combines NTP-corrected physical time with a logical counter to get:
+        ✅ Wall-clock accuracy from NTP (useful for display, TTL, debugging)
+        ✅ Causal ordering guarantee from Lamport clock
+        ✅ Monotonicity — HLC never goes backward, even if NTP adjusts
+
+    TIMESTAMP FORMAT:
+      (physical_ms, logical_counter)
+      - physical_ms: NTP-corrected wall-clock time in milliseconds
+      - logical_counter: incremented when physical time hasn't advanced
+
+    ENCODING (for storage and comparison):
+      We encode as a single 64-bit integer:
+        encoded = (physical_ms << 16) | (logical_counter & 0xFFFF)
+      This allows simple integer comparison for ordering while preserving
+      both physical and logical components.
+
+    ALGORITHM:
+      On local event or send:
+        new_physical = max(old_physical, NTP_corrected_now)
+        if new_physical == old_physical:
+            logical += 1   # physical didn't advance, use logical tie-breaker
+        else:
+            logical = 0    # physical advanced, reset logical
+        timestamp = (new_physical, logical)
+
+      On receive (with message timestamp (msg_physical, msg_logical)):
+        new_physical = max(old_physical, NTP_corrected_now, msg_physical)
+        if new_physical == old_physical == msg_physical:
+            logical = max(old_logical, msg_logical) + 1
+        elif new_physical == old_physical:
+            logical = old_logical + 1
+        elif new_physical == msg_physical:
+            logical = msg_logical + 1
+        else:
+            logical = 0
+        timestamp = (new_physical, logical)
+    """
+
+    def __init__(self, ntp_sync: NTPSynchronizer = None):
+        self._ntp_sync    = ntp_sync
+        self._physical_ms = 0
+        self._logical     = 0
+        self._lock        = threading.Lock()
+
+    def _now_ms(self) -> int:
+        """Get NTP-corrected current time, or fallback to system time."""
+        if self._ntp_sync:
+            return self._ntp_sync.get_corrected_timestamp_ms()
+        return int(time.time() * 1000)
+
+    def tick(self) -> tuple:
+        """
+        Generate an HLC timestamp for a local event (sending a message).
+        Returns (physical_ms, logical_counter) tuple.
+        """
+        with self._lock:
+            now = self._now_ms()
+            if now > self._physical_ms:
+                self._physical_ms = now
+                self._logical     = 0
+            else:
+                self._logical += 1
+            return (self._physical_ms, self._logical)
+
+    def update(self, msg_physical: int, msg_logical: int) -> tuple:
+        """
+        Update HLC when receiving a message with its HLC timestamp.
+        Returns updated (physical_ms, logical_counter) tuple.
+        """
+        with self._lock:
+            now = self._now_ms()
+            old_physical = self._physical_ms
+            old_logical  = self._logical
+
+            self._physical_ms = max(old_physical, now, msg_physical)
+
+            if self._physical_ms == old_physical == msg_physical:
+                self._logical = max(old_logical, msg_logical) + 1
+            elif self._physical_ms == old_physical:
+                self._logical = old_logical + 1
+            elif self._physical_ms == msg_physical:
+                self._logical = msg_logical + 1
+            else:
+                self._logical = 0
+
+            return (self._physical_ms, self._logical)
+
+    def encode(self, physical_ms: int, logical: int) -> int:
+        """
+        Encode HLC tuple into a single 64-bit integer for storage.
+        Allows simple integer comparison: if encoded(A) < encoded(B),
+        then event A happened before event B.
+        """
+        return (physical_ms << 16) | (logical & 0xFFFF)
+
+    def decode(self, encoded: int) -> tuple:
+        """Decode a stored HLC integer back to (physical_ms, logical)."""
+        physical_ms = encoded >> 16
+        logical     = encoded & 0xFFFF
+        return (physical_ms, logical)
+
+    @property
+    def current(self) -> tuple:
+        """Get current HLC value without incrementing."""
+        with self._lock:
+            return (self._physical_ms, self._logical)            

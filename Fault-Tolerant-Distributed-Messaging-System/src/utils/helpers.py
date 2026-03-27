@@ -25,3 +25,27 @@ def current_timestamp_ms() -> int:
 def ms_to_iso(timestamp_ms: int) -> str:
     """Convert a millisecond timestamp to ISO 8601 string for display."""
     return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc).isoformat()
+
+def validate_message(data: dict) -> tuple:
+    """
+    Validate a message dict before sending.
+    Returns (True, "") on success, (False, reason) on failure.
+    FastAPI's Pydantic models already validate HTTP requests;
+    this is used for programmatic calls (e.g., from the producer directly).
+    """
+    required = ["messageId", "fromUser", "toUser", "content"]
+    for field in required:
+        if field not in data or not data[field]:
+            return False, f"Missing required field: {field}"
+    if len(data["content"]) > 10_000:
+        return False, "Content exceeds 10,000 character limit"
+    return True, ""
+
+
+def validate_user(data: dict) -> tuple:
+    """Validate a user dict. Returns (True, "") or (False, reason)."""
+    required = ["userId", "username", "email"]
+    for field in required:
+        if field not in data or not data[field]:
+            return False, f"Missing required field: {field}"
+    return True, ""    

@@ -101,3 +101,78 @@ class MongoDBHandler:
         self.db[COL_LOGS].create_index(
             [("timestamp", ASCENDING)], background=True
         )
+def save_message(self, message_data: dict) -> bool:
+        """
+        Persist a message. Idempotent — safe to call multiple times.
+        Returns True on success AND on duplicate (no error raised for dupes).
+        Stores stored_at timestamp in milliseconds for audit trail.
+
+        TIMESTAMP CORRECTION (Part 3):
+          If the message has an NTP-corrected timestamp from the producer,
+          we store it as-is.  We also record stored_at (the time the DB
+          actually wrote this record) so we can calculate the end-to-end
+          delivery latency: delivery_latency = stored_at - timestamp.
+        """
+        try:
+            if "timestamp" not in message_data:
+                # Fallback: set timestamp at storage time if producer missed it
+                message_data["timestamp"] = int(time.time() * 1000)
+
+            # stored_at = when the DB actually wrote this record (audit trail)
+            message_data["stored_at"]      = int(datetime.now(timezone.utc).timestamp() * 1000)
+            message_data["deliveryStatus"] = message_data.get("deliveryStatus", "delivered")
+
+            self.db[COL_MESSAGES].insert_one(message_data)
+            logger.info(f"Message saved: {message_data.get('messageId')}")
+            return True
+
+        except errors.DuplicateKeyError:
+            # Duplicate messageId → message already in DB from earlier delivery.
+            # This is expected behaviour with at-least-once Kafka delivery.
+            logger.info(f"Duplicate message ignored (idempotent): {message_data.get('messageId')}")
+            return True
+
+        except Exception as exc:
+            logger.error(f"Failed to save message: {exc}")
+            raise
+
+    def get_messages_between_users(self, user1: str, user2: str, limit: int = 50) -> list:
+        """
+        Fetch full conversation between two users.
+        ALWAYS sorted: timestamp ASC (oldest first), then messageId tie-breaker.
+        This is the core Part 3 (Time & Order) read guarantee.
+
+        ORDERING STRATEGY:
+          Primary sort:  timestamp ASC (NTP-corrected physical time)
+          Secondary sort: hlc_encoded ASC (HLC causal order, if available)
+          Tertiary sort:  messageId ASC (final tie-breaker for truly concurrent messages)
+        """
+        query = {
+            "$or": [
+                {"fromUser": user1, "toUser": user2},
+                {"fromUser": user2, "toUser": user1},
+            ]
+        }
+        cursor = (
+            self.db[COL_MESSAGES]
+            .find(query, {"_id": 0})           # exclude internal MongoDB _id
+            .sort([("timestamp", ASCENDING), ("hlc_encoded", ASCENDING), ("messageId", ASCENDING)])
+            .limit(limit)
+        )
+        return list(cursor)
+
+    def get_all_messages(self, limit: int = 100) -> list:
+        """Return all messages sorted by time — used by GET /messages."""
+        return list(
+            self.db[COL_MESSAGES]
+            .find({}, {"_id": 0})
+            .sort([("timestamp", ASCENDING), ("hlc_encoded", ASCENDING), ("messageId", ASCENDING)])
+            .limit(limit)
+        )
+
+    def update_message_status(self, message_id: str, status: str) -> bool:
+        result = self.db[COL_MESSAGES].update_one(
+            {"messageId": message_id},
+            {"$set": {"deliveryStatus": status}},
+        )
+        return result.modified_count > 0        
