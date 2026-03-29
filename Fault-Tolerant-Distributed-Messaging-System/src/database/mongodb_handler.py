@@ -175,4 +175,64 @@ def save_message(self, message_data: dict) -> bool:
             {"messageId": message_id},
             {"$set": {"deliveryStatus": status}},
         )
-        return result.modified_count > 0        
+        return result.modified_count > 0      
+
+#Day 04
+def create_user(self, user_data: dict) -> bool:
+        """Create a user. Returns False (not error) if userId/username exists."""
+        try:
+            if "joinDate" not in user_data:
+                user_data["joinDate"] = int(datetime.now(timezone.utc).timestamp() * 1000)
+            self.db[COL_USERS].insert_one(user_data)
+            logger.info(f"User created: {user_data.get('username')}")
+            return True
+        except errors.DuplicateKeyError:
+            logger.warning(f"User already exists: {user_data.get('userId')}")
+            return False
+
+    def get_user(self, user_id: str):
+        return self.db[COL_USERS].find_one({"userId": user_id}, {"_id": 0})
+
+    def get_all_users(self) -> list:
+        return list(self.db[COL_USERS].find({}, {"_id": 0}))
+
+    def update_last_seen(self, user_id: str):
+        """Update lastSeen timestamp in milliseconds when user is fetched."""
+        self.db[COL_USERS].update_one(
+            {"userId": user_id},
+            {"$set": {"lastSeen": int(datetime.now(timezone.utc).timestamp() * 1000)}},
+        )
+
+    def create_chatroom(self, room_data: dict) -> bool:
+        try:
+            if "createdDate" not in room_data:
+                room_data["createdDate"] = int(datetime.now(timezone.utc).timestamp() * 1000)
+            self.db[COL_CHATROOMS].insert_one(room_data)
+            return True
+        except errors.DuplicateKeyError:
+            return False
+
+    def get_chatroom(self, room_id: str):
+        return self.db[COL_CHATROOMS].find_one({"roomId": room_id}, {"_id": 0})
+
+    def log_event(self, message_id: str, event: str, server_node: str = "node-1"):
+        """
+        Append a system log entry — called by the consumer after each message.
+        Provides full audit trail: which node processed which message and when.
+        Timestamps stored in milliseconds (Part 3 requirement).
+        """
+        self.db[COL_LOGS].insert_one({
+            "messageId":  message_id,
+            "event":      event,
+            "timestamp":  int(datetime.now(timezone.utc).timestamp() * 1000),
+            "serverNode": server_node,
+        })
+
+    def get_logs(self, limit: int = 50) -> list:
+        """Return most recent log entries (newest first) for GET /logs."""
+        return list(
+            self.db[COL_LOGS]
+            .find({}, {"_id": 0})
+            .sort("timestamp", -1)     # -1 = descending (newest first)
+            .limit(limit)
+        )

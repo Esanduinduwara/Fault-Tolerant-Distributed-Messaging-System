@@ -88,3 +88,7 @@ class TestNTPSynchronizer:
         clock.tick()
         val = clock.current
         assert val == clock.current  # reading twice gives same value
+
+        
+
+        

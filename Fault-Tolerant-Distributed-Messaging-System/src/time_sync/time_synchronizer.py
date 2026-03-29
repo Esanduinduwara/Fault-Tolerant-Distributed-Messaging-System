@@ -327,3 +327,74 @@ class HybridLogicalClock:
         """Get current HLC value without incrementing."""
         with self._lock:
             return (self._physical_ms, self._logical)            
+        
+        #Day04
+        class MessageReorderBuffer:
+    """
+    Reorder buffer that holds messages for a configurable time window
+    and releases them in timestamp-sorted order.
+
+    PURPOSE (Part 3: "Develop a mechanism to reorder messages that arrive
+    out of sequence due to network delays"):
+      In a distributed system, messages sent at times T1 < T2 may arrive
+      in reverse order (T2 arrives before T1) due to:
+        - Different network paths with varying latency
+        - Kafka partition rebalancing
+        - Consumer restarts processing from an earlier offset
+
+    MECHANISM:
+      1. Incoming messages are added to a buffer (sorted list)
+      2. A message is "ready" to be released when:
+         current_time - message_timestamp > window_ms
+      3. When flushed, all ready messages are returned sorted by timestamp
+      4. Messages not yet ready stay in the buffer for the next flush
+
+    TRADE-OFFS:
+      - Larger window → better ordering but higher delivery latency
+      - Smaller window → lower latency but more risk of out-of-order
+      - Default 500ms is a practical balance for LAN-connected servers
+    """
+
+    def __init__(self, window_ms: int = 500):
+        self._window_ms = window_ms
+        self._buffer    = []     # list of (timestamp_ms, message_dict)
+        self._lock      = threading.Lock()
+
+    def add(self, message: dict) -> None:
+        """Add a message to the reorder buffer."""
+        ts = message.get("timestamp", 0)
+        with self._lock:
+            self._buffer.append((ts, message))
+            # Keep buffer sorted by timestamp for efficient flush
+            self._buffer.sort(key=lambda x: x[0])
+
+    def flush(self) -> list:
+        """
+        Release all messages whose timestamp is older than the window.
+        Returns a list of message dicts, sorted by timestamp ascending.
+        Messages newer than (now - window_ms) stay in the buffer.
+        """
+        now_ms    = int(time.time() * 1000)
+        cutoff_ms = now_ms - self._window_ms
+
+        with self._lock:
+            ready   = [msg for ts, msg in self._buffer if ts <= cutoff_ms]
+            self._buffer = [(ts, msg) for ts, msg in self._buffer if ts > cutoff_ms]
+
+        return ready
+
+    def flush_all(self) -> list:
+        """
+        Force-release ALL messages (used during shutdown or when latency
+        doesn't matter). Returns messages sorted by timestamp.
+        """
+        with self._lock:
+            ready = [msg for _, msg in self._buffer]
+            self._buffer = []
+        return ready
+
+    @property
+    def size(self) -> int:
+        """Number of messages currently in the buffer."""
+        with self._lock:
+            return len(self._buffer)
