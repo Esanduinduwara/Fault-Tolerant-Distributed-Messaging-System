@@ -4,7 +4,7 @@
  MEMBER 4 — CONSENSUS & AGREEMENT          (leader election, leader-only job)
 =============================================================================
 
-MEMBER 2 DAILY PUSH
+MEMBER 2 DAILY PUSH (Replication)
 -------------------------------------------
 Day 1  →  Imports + _build_consumer() with group_id & manual commit settings
 Day 2  →  _on_partitions_assigned() + _process_message()
@@ -12,7 +12,7 @@ Day 3  →  start() main loop with auto-reconnect + stop()
 Day 4  →  Entry-point block (__main__) + integration test with Docker
 Day 5  →  Reorder buffer integration + quorum replication comments
 
-MEMBER 4 DAILY PUSH (Consensus — leader election)
+MEMBER 4 DAILY PUSH  (Consensus — leader election)
 -----------------------------------------------------------
 Day 1  →  try_acquire_leader_lock() function (MongoDB TTL distributed mutex)
 Day 2  →  run_leader_stats_job() function (leader-only background work)
@@ -230,10 +230,12 @@ class FaultTolerantConsumer:
         try:
             from src.fault_detection.heartbeat_monitor import HeartbeatMonitor
             self._heartbeat = HeartbeatMonitor()
-            # Register the API endpoint as a monitored node
-            self._heartbeat.register_node("api-server", "http://localhost:8000/health")
+            import os
+            api_host = os.getenv("API_HOST", "api") # In docker, it's 'api', locally it's 'localhost'
+            # Or simpler:
+            api_base = os.getenv("API_URL", "http://api:8000")
+            self._heartbeat.register_node("api-server", f"{api_base}/health")
             self._heartbeat.on_status_change(self._on_node_status_change)
-            logger.info(f"[{self.node_id}] Heartbeat monitor initialised")
         except Exception as exc:
             logger.warning(f"[{self.node_id}] Heartbeat monitor unavailable: {exc}")
             self._heartbeat = None
@@ -373,10 +375,7 @@ class FaultTolerantConsumer:
         while self.running:
             try:
                 self.consumer = self._build_consumer()
-                self.consumer.subscribe(
-                    [KAFKA_TOPIC_MESSAGES],
-                    on_assign=lambda c, p: self._on_partitions_assigned(p),
-                )
+                self.consumer.subscribe([KAFKA_TOPIC_MESSAGES])
                 logger.info(f"[{self.node_id}] Connected to Kafka. Polling …")
 
                 for message in self.consumer:
