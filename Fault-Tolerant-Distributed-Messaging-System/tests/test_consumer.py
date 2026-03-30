@@ -1,3 +1,22 @@
+"""
+=============================================================================
+ MEMBER 2 — DATA REPLICATION & MEMBER 4 — CONSENSUS — Consumer Unit Tests
+ File: tests/test_consumer.py
+ Run with: pytest tests/test_consumer.py -v
+=============================================================================
+
+PUSH SCHEDULE
+--------------
+Member 2:
+Day 2  →  Tests 1-3: Consumer init, _process_message, partition assignment
+Day 3  →  Tests 4-5: auto-reconnect behaviour, stop lifecycle
+Member 4:
+Day 3  →  Test 6: leader lock acquisition success
+Day 4  →  Test 7: leader lock contention (DuplicateKeyError)
+Day 5  →  Test 8: leader stats job updates system_stats
+=============================================================================
+"""
+
 import json
 import time
 import pytest
@@ -32,7 +51,7 @@ def mock_consumer_env(mock_mongodb):
 
 class TestFaultTolerantConsumer:
 
-    # ── MEMBER 2  ─────────────────────────────────────────────────────
+    # ── MEMBER 2  DAY 2 ─────────────────────────────────────────────────────
 
     def test_consumer_init(self, mock_consumer_env):
         """Consumer should initialize without error."""
@@ -68,7 +87,7 @@ class TestFaultTolerantConsumer:
         result = consumer._process_message(msg, offset=0, partition=0)
         assert result is False
 
-    # ── MEMBER 2   ─────────────────────────────────────────────────────
+    # ── MEMBER 2  DAY 3 ─────────────────────────────────────────────────────
 
     def test_build_consumer_config(self, mock_consumer_env):
         """_build_consumer should configure consumer group and manual commit."""
