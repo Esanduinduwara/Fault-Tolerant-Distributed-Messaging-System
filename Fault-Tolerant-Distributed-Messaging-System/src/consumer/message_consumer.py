@@ -1,3 +1,32 @@
+"""
+=============================================================================
+ MEMBER 2 — DATA REPLICATION & CONSISTENCY  (consumer group, at-least-once)
+ MEMBER 4 — CONSENSUS & AGREEMENT          (leader election, leader-only job)
+=============================================================================
+
+MEMBER 2 DAILY PUSH
+-------------------------------------------
+Day 1  →  Imports + _build_consumer() with group_id & manual commit settings
+Day 2  →  _on_partitions_assigned() + _process_message()
+Day 3  →  start() main loop with auto-reconnect + stop()
+Day 4  →  Entry-point block (__main__) + integration test with Docker
+Day 5  →  Reorder buffer integration + quorum replication comments
+
+MEMBER 4 DAILY PUSH (Consensus — leader election)
+-----------------------------------------------------------
+Day 1  →  try_acquire_leader_lock() function (MongoDB TTL distributed mutex)
+Day 2  →  run_leader_stats_job() function (leader-only background work)
+Day 3  →  _leader_loop() thread method inside FaultTolerantConsumer
+Day 4  →  Wire leader thread into start() — threading.Thread(...).start()
+Day 5  →  Scale to 2 consumers demo, verify only 1 runs leader job
+
+=============================================================================
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MEMBER 2  DAY 1
+# Core imports needed by both Member 2 and Member 4
+# ─────────────────────────────────────────────────────────────────────────────
 import json
 import time
 import logging
@@ -20,6 +49,122 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MEMBER 4  DAY 1
+# Distributed leader election via MongoDB TTL lock (Part 4: Consensus)
+# ─────────────────────────────────────────────────────────────────────────────
+def try_acquire_leader_lock(
+    db: MongoDBHandler, node_id: str, ttl_seconds: int = 30
+) -> bool:
+    """
+    Attempt to become the cluster leader for background jobs.
+
+    Mechanism (distributed mutex using MongoDB):
+      1. Each consumer tries to INSERT a doc with _id='leader'.
+      2. MongoDB unique-_id constraint: only ONE insert can succeed.
+      3. The winner is the leader; others get DuplicateKeyError and back off.
+      4. A TTL index deletes the doc after ttl_seconds automatically.
+         If the leader crashes, the lock expires and another node can win.
+
+    WHY NOT RAFT/PAXOS?
+    ─────────────────────
+    We evaluated Raft and Paxos for leader election but chose a MongoDB TTL
+    lock for the following reasons:
+
+    Comparison with RAFT:
+      ✅ Raft: provides strong consensus with leader election and log replication
+      ❌ Raft: requires a separate Raft cluster (3-5 nodes) with persistent
+         state machines, dramatically increasing infrastructure complexity
+      ✅ Our approach: leverages the existing MongoDB server as the consensus
+         authority — zero additional infrastructure
+      ✅ Our approach: TTL-based auto-expiry handles leader crashes automatically
+         (equivalent to Raft's heartbeat timeout and election trigger)
+
+    Comparison with PAXOS:
+      ✅ Paxos: proven mathematically correct consensus
+      ❌ Paxos: notoriously complex to implement correctly
+         (Leslie Lamport: "Paxos is simple, but most people find it difficult")
+      ❌ Paxos: multi-round protocol has higher latency per consensus decision
+      ✅ Our approach: single MongoDB insert = one network round-trip
+
+    SIMILARITY TO BULLY ALGORITHM:
+      Our approach resembles the Bully election algorithm:
+      - All nodes periodically attempt to claim leadership
+      - The first to succeed (lowest latency to MongoDB) wins
+      - If the leader fails, TTL expires and the next attempt wins
+      - Unlike Bully, we don't compare process IDs — any node can be leader
+
+    TRADE-OFFS:
+      ⚠️ Depends on MongoDB availability (single point of failure for consensus)
+      ⚠️ TTL expiry is approximate (~60s sweep cycle) so failover may take
+         up to ttl_seconds + 60s in worst case
+      ✅ Extremely simple to implement and reason about
+      ✅ Zero additional dependencies beyond the existing MongoDB
+    """
+    from pymongo import errors as pymongo_errors
+
+    lock_col = db.db["leader_lock"]
+
+    # ── One-time TTL index setup (idempotent) ─────────────────────────────
+    # MongoDB's TTL background thread sweeps every ~60s and removes
+    # documents where expires_at < now.  create_index is a no-op if
+    # the index already exists (safe to call on every attempt).
+    lock_col.create_index("expires_at", expireAfterSeconds=0, background=True)
+
+    now_dt  = datetime.now(timezone.utc)
+    expires = datetime.fromtimestamp(
+        now_dt.timestamp() + ttl_seconds, tz=timezone.utc
+    )
+
+    try:
+        lock_col.insert_one(
+            {
+                "_id":         "leader",   # only ONE doc can have this _id
+                "node_id":     node_id,    # which consumer holds the lock
+                "acquired_at": now_dt,
+                "expires_at":  expires,    # auto-deleted after ttl_seconds
+            }
+        )
+        return True   # INSERT succeeded → this node is the leader
+    except pymongo_errors.DuplicateKeyError:
+        return False  # Another node already holds the lock
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MEMBER 4  DAY 2
+# Leader-only stats job — runs ONLY on the elected leader consumer
+# ─────────────────────────────────────────────────────────────────────────────
+def run_leader_stats_job(db: MongoDBHandler):
+    """
+    Aggregate system statistics and persist to system_stats collection.
+    Called only by the leader consumer — never duplicated across instances.
+    Results are readable via GET /stats endpoint.
+    """
+    try:
+        msg_count  = db.db["messages"].count_documents({})
+        user_count = db.db["users"].count_documents({})
+        db.db["system_stats"].replace_one(
+            {"_id": "latest"},
+            {
+                "_id":           "latest",
+                "message_count": msg_count,
+                "user_count":    user_count,
+                "computed_at":   int(datetime.now(timezone.utc).timestamp() * 1000),
+            },
+            upsert=True,
+        )
+        logger.info(
+            f"[LEADER JOB] Stats updated — "
+            f"{msg_count} messages, {user_count} users"
+        )
+    except Exception as exc:
+        logger.warning(f"[LEADER JOB] Failed: {exc}")
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 class FaultTolerantConsumer:
     """
@@ -106,6 +251,8 @@ class FaultTolerantConsumer:
             f"{old_status.value} → {new_status.value}"
         )
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # MEMBER 2  DAY 1
     # KafkaConsumer factory — key settings for replication and fault tolerance
     # ─────────────────────────────────────────────────────────────────────────
     def _build_consumer(self) -> KafkaConsumer:
@@ -133,7 +280,10 @@ class FaultTolerantConsumer:
             heartbeat_interval_ms=10_000, # send heartbeat every 10s
             max_poll_records=10,
         )
+    # ─────────────────────────────────────────────────────────────────────────
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # MEMBER 2  DAY 2
     # Partition assignment callback + message processor
     # ─────────────────────────────────────────────────────────────────────────
     def _on_partitions_assigned(self, partitions):
@@ -155,7 +305,7 @@ class FaultTolerantConsumer:
             # ── HLC update on receive (Part 3: causal ordering) ──────────
             if self._hlc and "hlc_logical" in msg_value:
                 msg_physical = msg_value.get("timestamp", 0)
-                msg_logical = msg_value.get("hlc_logical", 0)
+                msg_logical  = msg_value.get("hlc_logical", 0)
                 self._hlc.update(msg_physical, msg_logical)
 
             # ── Clock skew analysis (Part 3) ─────────────────────────────
@@ -176,8 +326,30 @@ class FaultTolerantConsumer:
         except Exception as exc:
             logger.error(f"[{self.node_id}] ❌  Failed to process {msg_id}: {exc}")
             return False
+    # ─────────────────────────────────────────────────────────────────────────
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # MEMBER 4  DAY 3
+    # Leader election background thread — runs every 25 seconds
+    # ─────────────────────────────────────────────────────────────────────────
+    def _leader_loop(self):
+        """
+        Background thread: every 25 s attempt to acquire leader lock.
+        If successful, run the stats aggregation job (leader-only task).
+        This guarantees only ONE consumer runs the job at any time.
+        """
+        while self.running:
+            time.sleep(25)
+            if try_acquire_leader_lock(self.db, self.node_id, ttl_seconds=30):
+                logger.info(
+                    f"[{self.node_id}] 👑  Elected as leader — running stats job"
+                )
+                run_leader_stats_job(self.db)
+    # ─────────────────────────────────────────────────────────────────────────
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # MEMBER 2  DAY 3
+    # MEMBER 4  DAY 4  ▸  ADD the leader thread lines (marked below)
     # Main consumer loop with auto-reconnect on any failure
     # ─────────────────────────────────────────────────────────────────────────
     def start(self):
@@ -188,13 +360,13 @@ class FaultTolerantConsumer:
         )
         self.running = True
 
-        # MEMBER 4  ▸  Leader election thread
+        # MEMBER 4  DAY 4  ▸  Leader election thread
         self._leader_thread = threading.Thread(
             target=self._leader_loop, daemon=True
         )
         self._leader_thread.start()
 
-        # MEMBER 1  ▸  Heartbeat failure detection thread
+        # MEMBER 1  DAY 4  ▸  Heartbeat failure detection thread
         if self._heartbeat:
             self._heartbeat.start()
 
@@ -254,3 +426,20 @@ class FaultTolerantConsumer:
                 pass
         self.db.close()
         logger.info(f"[{self.node_id}] Consumer stopped.")
+    # ─────────────────────────────────────────────────────────────────────────
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MEMBER 2  DAY 4
+# Entry point — docker consumer.Dockerfile calls this via python -m
+# ─────────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import os
+
+    node     = os.getenv("CONSUMER_NODE_ID", "consumer-1")
+    consumer = FaultTolerantConsumer(node_id=node)
+    try:
+        consumer.start()
+    except KeyboardInterrupt:
+        consumer.stop()
+# ─────────────────────────────────────────────────────────────────────────────
