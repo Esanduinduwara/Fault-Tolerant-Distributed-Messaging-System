@@ -236,3 +236,68 @@ def create_user(self, user_data: dict) -> bool:
             .sort("timestamp", -1)     # -1 = descending (newest first)
             .limit(limit)
         )
+
+def correct_timestamps(self, ntp_offset_ms: float, batch_size: int = 100) -> int:
+        """
+        Timestamp correction technique (Part 3 requirement).
+
+        Retroactively adjusts stored message timestamps based on the current
+        NTP offset.  This is useful when:
+          - A node's clock was significantly skewed when it stored messages
+          - NTP sync reveals the offset after messages are already persisted
+
+        Args:
+            ntp_offset_ms: the NTP offset in milliseconds (+ means local was behind)
+            batch_size: number of messages to correct per batch
+
+        Returns:
+            Number of messages corrected.
+
+        NOTE: This operation is append-only — the original timestamp is
+        preserved in 'original_timestamp' so corrections are reversible.
+        """
+        corrected = 0
+        cursor = self.db[COL_MESSAGES].find(
+            {"timestamp_corrected": {"$ne": True}},
+            {"_id": 1, "timestamp": 1}
+        ).limit(batch_size)
+
+        for doc in cursor:
+            original_ts = doc["timestamp"]
+            corrected_ts = original_ts + int(ntp_offset_ms)
+
+            self.db[COL_MESSAGES].update_one(
+                {"_id": doc["_id"]},
+                {
+                    "$set": {
+                        "timestamp":            corrected_ts,
+                        "original_timestamp":   original_ts,
+                        "timestamp_corrected":  True,
+                        "correction_offset_ms": int(ntp_offset_ms),
+                    }
+                },
+            )
+            corrected += 1
+
+        if corrected > 0:
+            logger.info(
+                f"[TIMESTAMP CORRECTION] Corrected {corrected} messages "
+                f"by {ntp_offset_ms:+.2f}ms"
+            )
+        return corrected
+
+    def health_check(self) -> bool:
+        """Ping MongoDB server. Used by GET /health and Docker healthcheck."""
+        try:
+            self.client.admin.command("ping")
+            return True
+        except Exception:
+            return False
+
+    def close(self):
+        """Close MongoDB connection and reset singleton so it can reconnect."""
+        self.client.close()
+        with MongoDBHandler._init_lock:
+            MongoDBHandler._instance    = None
+            MongoDBHandler._initialised = False
+        self._initialised = False

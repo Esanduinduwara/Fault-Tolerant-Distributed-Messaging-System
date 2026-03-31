@@ -398,3 +398,88 @@ class HybridLogicalClock:
         """Number of messages currently in the buffer."""
         with self._lock:
             return len(self._buffer)
+        
+class ClockSkewAnalyzer:
+    """
+    Analyzes clock skew between nodes by comparing message timestamps
+    with local receive timestamps.
+
+    PURPOSE (Part 3: "Analyze the impact of clock skew on message ordering"):
+      When sender's clock is ahead of receiver's clock by Δ ms:
+        - Messages appear to arrive "from the future"
+        - Sorting by timestamp places them AFTER messages that were
+          actually sent later — breaking real-time ordering
+
+      When sender's clock is behind receiver's clock by Δ ms:
+        - Messages appear older than they are
+        - May be incorrectly placed before more recent messages
+
+    HOW IT WORKS:
+      1. When a message arrives, record (sender_timestamp, local_receive_time)
+      2. The difference (local_receive - sender_timestamp) is the observed skew
+         (includes both clock difference AND network latency)
+      3. Over many messages, the MINIMUM observed difference approximates
+         the true clock skew (minimum latency is closest to just the skew)
+
+    IMPACT ON THIS SYSTEM:
+      - Clock skew < 500ms: reorder buffer handles it (window = 500ms)
+      - Clock skew > 500ms: messages may be released in wrong order
+        → solution: increase REORDER_BUFFER_WINDOW_MS or sync more often
+    """
+
+    def __init__(self):
+        self._samples     = []     # list of (sender_id, skew_ms) tuples
+        self._lock        = threading.Lock()
+        self._max_samples = 1000   # keep last 1000 samples to limit memory
+
+    def record_skew(self, sender_node: str, sender_timestamp_ms: int) -> float:
+        """
+        Record the clock skew observed when receiving a message.
+        Returns the observed skew in milliseconds.
+        Positive = sender clock is behind, Negative = sender clock is ahead.
+        """
+        local_now_ms = int(time.time() * 1000)
+        skew_ms      = local_now_ms - sender_timestamp_ms
+
+        with self._lock:
+            self._samples.append((sender_node, skew_ms))
+            # Trim old samples to prevent memory growth
+            if len(self._samples) > self._max_samples:
+                self._samples = self._samples[-self._max_samples:]
+
+        # Log warning if skew exceeds the reorder buffer window
+        if abs(skew_ms) > 500:
+            logger.warning(
+                f"[CLOCK SKEW] High skew detected from {sender_node}: "
+                f"{skew_ms:+.0f}ms — messages may arrive out of order"
+            )
+
+        return skew_ms
+
+    def get_skew_report(self) -> dict:
+        """
+        Generate a report of observed clock skew across all nodes.
+        Returns per-node statistics: min, max, average, and sample count.
+        """
+        with self._lock:
+            samples_copy = list(self._samples)
+
+        if not samples_copy:
+            return {"status": "no_data", "nodes": {}}
+
+        # Group by sender node
+        per_node = {}
+        for node, skew in samples_copy:
+            per_node.setdefault(node, []).append(skew)
+
+        report = {"status": "ok", "nodes": {}}
+        for node, skews in per_node.items():
+            report["nodes"][node] = {
+                "sample_count": len(skews),
+                "min_skew_ms":  min(skews),
+                "max_skew_ms":  max(skews),
+                "avg_skew_ms":  sum(skews) / len(skews),
+                "estimated_clock_offset_ms": min(skews),  # minimum ≈ true skew
+            }
+
+        return report        
