@@ -1,0 +1,15 @@
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    replayer = DLQReplayer()
+    stats    = replayer.replay()
+
+    print(f"\n{'='*50}")
+    print(f"DLQ Replay Complete")
+    print(f"  Total messages:   {stats['total']}")
+    print(f"  Replayed:         {stats['replayed']}")
+    print(f"  Still failed:     {stats['still_failed']}")
+    print(f"{'='*50}\n")
