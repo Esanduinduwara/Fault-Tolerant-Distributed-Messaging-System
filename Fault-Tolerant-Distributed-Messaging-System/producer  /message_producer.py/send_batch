@@ -1,0 +1,19 @@
+  def send_batch(self, messages: list) -> dict:
+        """Send multiple messages. Returns stats dict. Demonstrates scalability."""
+        results = {"sent": 0, "failed": 0}
+        for msg in messages:
+            if self.send_message(msg):
+                results["sent"]   += 1
+            else:
+                results["failed"] += 1
+        self.producer.flush()
+        logger.info("Batch complete: %s", results)
+        return results
+
+    def close(self):
+        """Flush all pending messages and cleanly shut down the producer."""
+        self.producer.flush()
+        self.producer.close()
+        if self._ntp_sync:
+            self._ntp_sync.stop()
+        logger.info("Producer closed safely.")
