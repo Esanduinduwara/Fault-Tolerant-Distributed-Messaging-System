@@ -1,3 +1,6 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Central config: all connection strings and constants live here.
+# ─────────────────────────────────────────────────────────────────────────────
 import os
 from dotenv import load_dotenv
 
