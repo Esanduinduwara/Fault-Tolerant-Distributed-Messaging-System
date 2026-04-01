@@ -24,7 +24,7 @@ Day 5  →  Scale to 2 consumers demo, verify only 1 runs leader job
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MEMBER 2  DAY 1
+# MEMBER 2  DAY 1  
 # Core imports needed by both Member 2 and Member 4
 # ─────────────────────────────────────────────────────────────────────────────
 import json
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MEMBER 4  DAY 1
+# MEMBER 4  DAY 1 
 # Distributed leader election via MongoDB TTL lock (Part 4: Consensus)
 # ─────────────────────────────────────────────────────────────────────────────
 def try_acquire_leader_lock(
@@ -135,7 +135,7 @@ def try_acquire_leader_lock(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MEMBER 4  DAY 2
+# MEMBER 4  DAY 2 
 # Leader-only stats job — runs ONLY on the elected leader consumer
 # ─────────────────────────────────────────────────────────────────────────────
 def run_leader_stats_job(db: MongoDBHandler):
@@ -254,7 +254,7 @@ class FaultTolerantConsumer:
         )
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEMBER 2  DAY 1
+    # MEMBER 2  DAY 1  
     # KafkaConsumer factory — key settings for replication and fault tolerance
     # ─────────────────────────────────────────────────────────────────────────
     def _build_consumer(self) -> KafkaConsumer:
@@ -285,7 +285,7 @@ class FaultTolerantConsumer:
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEMBER 2  DAY 2
+    # MEMBER 2  DAY 2 
     # Partition assignment callback + message processor
     # ─────────────────────────────────────────────────────────────────────────
     def _on_partitions_assigned(self, partitions):
@@ -331,7 +331,7 @@ class FaultTolerantConsumer:
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEMBER 4  DAY 3
+    # MEMBER 4  DAY 3 
     # Leader election background thread — runs every 25 seconds
     # ─────────────────────────────────────────────────────────────────────────
     def _leader_loop(self):
@@ -350,7 +350,7 @@ class FaultTolerantConsumer:
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEMBER 2  DAY 3
+    # MEMBER 2  DAY 3  
     # MEMBER 4  DAY 4  ▸  ADD the leader thread lines (marked below)
     # Main consumer loop with auto-reconnect on any failure
     # ─────────────────────────────────────────────────────────────────────────
@@ -429,7 +429,7 @@ class FaultTolerantConsumer:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MEMBER 2  DAY 4
+# MEMBER 2  DAY 4  
 # Entry point — docker consumer.Dockerfile calls this via python -m
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
