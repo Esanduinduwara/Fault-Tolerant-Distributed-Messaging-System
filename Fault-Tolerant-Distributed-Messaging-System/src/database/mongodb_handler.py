@@ -1,3 +1,15 @@
+"""
+=============================================================================
+ MEMBER 3 — TIME SYNCHRONIZATION & MESSAGE ORDERING
+=============================================================================
+
+=============================================================================
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DAY 1  
+# Imports + Singleton class skeleton + __new__ + __init__ with WriteConcern
+# ─────────────────────────────────────────────────────────────────────────────
 import logging
 import time
 import threading
@@ -53,7 +65,12 @@ class MongoDBHandler:
         self._ensure_indexes()
         self._initialised = True
         logger.info("MongoDB connected and indexes verified.")
+# ─────────────────────────────────────────────────────────────────────────────
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # DAY 2  
+    # Index creation — the foundation of time ordering and deduplication
+    # ─────────────────────────────────────────────────────────────────────────
     def _ensure_indexes(self):
         """
         Create all required indexes on first startup.
@@ -101,7 +118,13 @@ class MongoDBHandler:
         self.db[COL_LOGS].create_index(
             [("timestamp", ASCENDING)], background=True
         )
-def save_message(self, message_data: dict) -> bool:
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DAY 3  
+    # Message persistence and retrieval — core Part 3 methods
+    # ─────────────────────────────────────────────────────────────────────────
+    def save_message(self, message_data: dict) -> bool:
         """
         Persist a message. Idempotent — safe to call multiple times.
         Returns True on success AND on duplicate (no error raised for dupes).
@@ -175,10 +198,14 @@ def save_message(self, message_data: dict) -> bool:
             {"messageId": message_id},
             {"$set": {"deliveryStatus": status}},
         )
-        return result.modified_count > 0      
+        return result.modified_count > 0
+    # ─────────────────────────────────────────────────────────────────────────
 
-#Day 04
-def create_user(self, user_data: dict) -> bool:
+    # ─────────────────────────────────────────────────────────────────────────
+    # DAY 4  
+    # User management + chat rooms + system audit logging
+    # ─────────────────────────────────────────────────────────────────────────
+    def create_user(self, user_data: dict) -> bool:
         """Create a user. Returns False (not error) if userId/username exists."""
         try:
             if "joinDate" not in user_data:
@@ -236,8 +263,13 @@ def create_user(self, user_data: dict) -> bool:
             .sort("timestamp", -1)     # -1 = descending (newest first)
             .limit(limit)
         )
+    # ─────────────────────────────────────────────────────────────────────────
 
-def correct_timestamps(self, ntp_offset_ms: float, batch_size: int = 100) -> int:
+    # ─────────────────────────────────────────────────────────────────────────
+    # DAY 5  
+    # Health check + connection teardown + singleton reset + timestamp correction
+    # ─────────────────────────────────────────────────────────────────────────
+    def correct_timestamps(self, ntp_offset_ms: float, batch_size: int = 100) -> int:
         """
         Timestamp correction technique (Part 3 requirement).
 
@@ -301,3 +333,4 @@ def correct_timestamps(self, ntp_offset_ms: float, batch_size: int = 100) -> int
             MongoDBHandler._instance    = None
             MongoDBHandler._initialised = False
         self._initialised = False
+    # ─────────────────────────────────────────────────────────────────────────
