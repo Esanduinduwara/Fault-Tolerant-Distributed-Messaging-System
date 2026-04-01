@@ -49,3 +49,29 @@ def validate_user(data: dict) -> tuple:
         if field not in data or not data[field]:
             return False, f"Missing required field: {field}"
     return True, ""    
+#day 04
+def setup_logging(level: str = "INFO") -> logging.Logger:
+    """Configure root logger. Call once at application startup."""
+    numeric = getattr(logging, level.upper(), logging.INFO)
+    logging.basicConfig(
+        level=numeric,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    return logging.getLogger("streamflow")
+
+
+def create_sample_message(from_user: str, to_user: str, content: str) -> dict:
+    """
+    Convenience factory used by the producer smoke-test and test helpers.
+    Always includes a millisecond timestamp (Part 3 requirement).
+    """
+    return {
+        "messageId":      generate_message_id(),
+        "fromUser":       from_user,
+        "toUser":         to_user,
+        "content":        content,
+        "messageType":    "text",
+        "deliveryStatus": "sent",
+        "timestamp":      current_timestamp_ms(),
+    }
