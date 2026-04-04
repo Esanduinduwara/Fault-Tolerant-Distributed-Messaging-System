@@ -163,7 +163,7 @@ class NTPSynchronizer:
         """Stop the background sync thread."""
         self._running = False
 
-    class LamportClock:
+class LamportClock:
     """
         Lamport Logical Clock (Leslie Lamport, 1978).
 
@@ -328,8 +328,8 @@ class HybridLogicalClock:
         with self._lock:
             return (self._physical_ms, self._logical)            
         
-        #Day04
-        class MessageReorderBuffer:
+#Day04
+class MessageReorderBuffer:
     """
     Reorder buffer that holds messages for a configurable time window
     and releases them in timestamp-sorted order.

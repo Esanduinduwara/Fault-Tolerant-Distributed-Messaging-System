@@ -1,14 +1,15 @@
+"""
 =============================================================================
- MEMBER 1 — FAULT TOLERANCE — DLQ Replayer Unit Tests
+ MEMBER 1 - FAULT TOLERANCE - DLQ Replayer Unit Tests
  File: tests/test_dlq_replayer.py
  Run with: pytest tests/test_dlq_replayer.py -v
 =============================================================================
 
-PUSH SCHEDULE (Member 1 — DLQ Replayer Tests)
+PUSH SCHEDULE (Member 1 - DLQ Replayer Tests)
 -----------------------------------------------
-Day 3  ▸  test_no_dlq_file + test_replay_success
-Day 4  ▸  test_partial_replay + test_archive_created
-Day 5  ▸  Run full suite, verify green
+Day 3  -  test_no_dlq_file + test_replay_success
+Day 4  -  test_partial_replay + test_archive_created
+Day 5  -  Run full suite, verify green
 
 
 =============================================================================
@@ -88,7 +89,7 @@ class TestDLQReplayer:
         assert not os.path.exists(dlq_path)
 
     def test_partial_replay(self, tmp_path):
-        """Some messages fail → they should stay in the DLQ file."""
+        """Some messages fail so they should stay in the DLQ file."""
         dlq_path = str(tmp_path / "partial.jsonl")
 
         entries = [

@@ -1,0 +1,11 @@
+﻿* feature/replication_consumer
+main
+remotes/origin/Esandu/feature/fault_tolerance
+remotes/origin/HEAD -> origin/main
+remotes/origin/ashen/config-updates
+remotes/origin/dev
+remotes/origin/feature/fault_tolerance_correct
+remotes/origin/feature/helper
+remotes/origin/feature/replication_consumer
+remotes/origin/main
+remotes/origin/temp-reset-branch
