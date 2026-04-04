@@ -2,26 +2,13 @@
 =============================================================================
  MEMBER 2 — DATA REPLICATION & CONSISTENCY  (consumer group, at-least-once)
  MEMBER 4 — CONSENSUS & AGREEMENT          (leader election, leader-only job)
-=============================================================================
 
-MEMBER 2 DAILY PUSH (Replication)
--------------------------------------------
-Day 1  →  Imports + _build_consumer() with group_id & manual commit settings
-Day 2  →  _on_partitions_assigned() + _process_message()
-Day 3  →  start() main loop with auto-reconnect + stop()
-Day 4  →  Entry-point block (__main__) + integration test with Docker
-Day 5  →  Reorder buffer integration + quorum replication comments
 
-MEMBER 4 DAILY PUSH  (Consensus — leader election)
------------------------------------------------------------
-Day 1  →  try_acquire_leader_lock() function (MongoDB TTL distributed mutex)
-Day 2  →  run_leader_stats_job() function (leader-only background work)
-Day 3  →  _leader_loop() thread method inside FaultTolerantConsumer
-Day 4  →  Wire leader thread into start() — threading.Thread(...).start()
-Day 5  →  Scale to 2 consumers demo, verify only 1 runs leader job
-
-=============================================================================
 """
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MEMBER 2  DAY 1  
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MEMBER 2  DAY 1  

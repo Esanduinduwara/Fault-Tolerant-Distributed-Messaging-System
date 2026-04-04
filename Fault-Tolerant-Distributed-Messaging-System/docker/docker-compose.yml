@@ -1,7 +1,4 @@
-# =============================================================================
-# =============================================================================
 
-# =============================================================================
 
 # ─────────────────────────────────────────────────────────────────────────────
 # QUORUM-BASED REPLICATION STRATEGY (Part 2: Data Replication)
@@ -13,14 +10,14 @@
 #
 # This forms a QUORUM: writes succeed only when a majority (2 out of 3)
 # of replicas acknowledge.  Benefits:
-#   ✅ Zero data loss on single-broker failure (2 copies remain)
-#   ✅ Automatic leader election by Kafka (via Zookeeper) on broker crash
-#   ✅ No split-brain: only in-sync replicas participate in quorum
+#   Zero data loss on single-broker failure (2 copies remain)
+#   Automatic leader election by Kafka (via Zookeeper) on broker crash
+#   No split-brain: only in-sync replicas participate in quorum
 #
 # Trade-offs:
-#   ⚠️ Higher write latency (must wait for 2 acks instead of 1)
-#   ⚠️ 3× storage for each message (replicated across 3 brokers)
-#   ⚠️ Requires at least 2 brokers UP to accept any writes
+#   Higher write latency (must wait for 2 acks instead of 1)
+#   3× storage for each message (replicated across 3 brokers)
+#   Requires at least 2 brokers UP to accept any writes
 #
 # This is a PRIMARY-BACKUP replication model:
 #   - Kafka elects ONE broker as the partition LEADER (primary)

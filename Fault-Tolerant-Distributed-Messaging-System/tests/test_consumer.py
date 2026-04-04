@@ -1,20 +1,6 @@
 """
-=============================================================================
  MEMBER 2 — DATA REPLICATION & MEMBER 4 — CONSENSUS — Consumer Unit Tests
- File: tests/test_consumer.py
  Run with: pytest tests/test_consumer.py -v
-=============================================================================
-
-PUSH SCHEDULE
---------------
-Member 2:
-Day 2  →  Tests 1-3: Consumer init, _process_message, partition assignment
-Day 3  →  Tests 4-5: auto-reconnect behaviour, stop lifecycle
-Member 4:
-Day 3  →  Test 6: leader lock acquisition success
-Day 4  →  Test 7: leader lock contention (DuplicateKeyError)
-Day 5  →  Test 8: leader stats job updates system_stats
-=============================================================================
 """
 
 import json
@@ -107,3 +93,43 @@ class TestFaultTolerantConsumer:
         consumer.running = True
         consumer.stop()
         assert consumer.running is False
+        
+        
+    # ── MEMBER 4  DAY 3 ─────────────────────────────────────────────────────
+
+    def test_leader_lock_acquisition(self, mock_mongodb):
+        """try_acquire_leader_lock should return True on successful insert."""
+        from src.consumer.message_consumer import try_acquire_leader_lock
+
+        mock_mongodb.db["leader_lock"].create_index = MagicMock()
+        mock_mongodb.db["leader_lock"].insert_one = MagicMock(return_value=None)
+
+        result = try_acquire_leader_lock(mock_mongodb, "node-1", ttl_seconds=30)
+        assert result is True
+
+    def test_leader_lock_contention(self, mock_mongodb):
+        """Second lock attempt should return False (DuplicateKeyError)."""
+        from src.consumer.message_consumer import try_acquire_leader_lock
+        from pymongo.errors import DuplicateKeyError
+
+        mock_mongodb.db["leader_lock"].create_index = MagicMock()
+        mock_mongodb.db["leader_lock"].insert_one = MagicMock(
+            side_effect=DuplicateKeyError("duplicate")
+        )
+
+        result = try_acquire_leader_lock(mock_mongodb, "node-2", ttl_seconds=30)
+        assert result is False
+
+    def test_leader_stats_job(self, mock_mongodb):
+        """run_leader_stats_job should aggregate counts into system_stats."""
+        from src.consumer.message_consumer import run_leader_stats_job
+
+        mock_mongodb.db["messages"].count_documents.return_value = 42
+        mock_mongodb.db["users"].count_documents.return_value = 3
+
+        run_leader_stats_job(mock_mongodb)
+
+        mock_mongodb.db["system_stats"].replace_one.assert_called_once()
+        call_args = mock_mongodb.db["system_stats"].replace_one.call_args
+        assert call_args[0][1]["message_count"] == 42
+        assert call_args[0][1]["user_count"] == 3        
