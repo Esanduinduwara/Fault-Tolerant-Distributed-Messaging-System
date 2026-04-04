@@ -10,11 +10,7 @@ Day 3  ▸  test_no_dlq_file + test_replay_success
 Day 4  ▸  test_partial_replay + test_archive_created
 Day 5  ▸  Run full suite, verify green
 
-GIT COMMIT MESSAGE TEMPLATES
------------------------------
-Day 3: "test(dlq): add tests for missing DLQ file and successful replay"
-Day 4: "test(dlq): add tests for partial replay and archive verification"
-Day 5: "test(dlq): all DLQ replayer tests passing — Part 1 verified"
+
 =============================================================================
 """
 
