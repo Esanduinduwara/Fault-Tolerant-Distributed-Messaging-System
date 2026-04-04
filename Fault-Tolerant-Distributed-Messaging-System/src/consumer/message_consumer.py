@@ -2,45 +2,16 @@
 =============================================================================
  MEMBER 2 — DATA REPLICATION & CONSISTENCY  (consumer group, at-least-once)
  MEMBER 4 — CONSENSUS & AGREEMENT          (leader election, leader-only job)
- File: src/consumer/message_consumer.py
- Grading Part 2 (20%) + Part 4 (20%)
-=============================================================================
 
-MEMBER 2 DAILY PUSH SCHEDULE (Replication)
--------------------------------------------
-Day 1  →  Imports + _build_consumer() with group_id & manual commit settings
-Day 2  →  _on_partitions_assigned() + _process_message()
-Day 3  →  start() main loop with auto-reconnect + stop()
-Day 4  →  Entry-point block (__main__) + integration test with Docker
-Day 5  →  Reorder buffer integration + quorum replication comments
 
-MEMBER 4 DAILY PUSH SCHEDULE (Consensus — leader election)
------------------------------------------------------------
-Day 1  →  try_acquire_leader_lock() function (MongoDB TTL distributed mutex)
-Day 2  →  run_leader_stats_job() function (leader-only background work)
-Day 3  →  _leader_loop() thread method inside FaultTolerantConsumer
-Day 4  →  Wire leader thread into start() — threading.Thread(...).start()
-Day 5  →  Scale to 2 consumers demo, verify only 1 runs leader job
-
-GIT COMMIT MESSAGE TEMPLATES
------------------------------
-Member 2:
-  Day 1: "feat(consumer): add KafkaConsumer with consumer group and manual offset commit"
-  Day 2: "feat(consumer): add partition assignment logging and message processing with audit log"
-  Day 3: "feat(consumer): implement fault-tolerant start() loop with auto-reconnect"
-  Day 4: "feat(consumer): add entry point and verify end-to-end Docker consumer flow"
-  Day 5: "feat(consumer): integrate reorder buffer and quorum replication documentation"
-Member 4:
-  Day 1: "feat(consensus): implement MongoDB TTL distributed leader lock (try_acquire_leader_lock)"
-  Day 2: "feat(consensus): implement leader-only stats aggregation job (run_leader_stats_job)"
-  Day 3: "feat(consensus): add _leader_loop background thread for periodic leader election"
-  Day 4: "feat(consensus): wire leader election thread into consumer start() lifecycle"
-  Day 5: "test(consensus): verify single-leader guarantee with scaled consumer demo"
-=============================================================================
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MEMBER 2  DAY 1  ▸  PUSH THIS BLOCK
+# MEMBER 2  DAY 1  
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MEMBER 2  DAY 1  
 # Core imports needed by both Member 2 and Member 4
 # ─────────────────────────────────────────────────────────────────────────────
 import json
@@ -69,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MEMBER 4  DAY 1  ▸  PUSH THIS BLOCK
+# MEMBER 4  DAY 1 
 # Distributed leader election via MongoDB TTL lock (Part 4: Consensus)
 # ─────────────────────────────────────────────────────────────────────────────
 def try_acquire_leader_lock(
@@ -151,7 +122,7 @@ def try_acquire_leader_lock(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MEMBER 4  DAY 2  ▸  PUSH THIS BLOCK
+# MEMBER 4  DAY 2 
 # Leader-only stats job — runs ONLY on the elected leader consumer
 # ─────────────────────────────────────────────────────────────────────────────
 def run_leader_stats_job(db: MongoDBHandler):
@@ -246,10 +217,12 @@ class FaultTolerantConsumer:
         try:
             from src.fault_detection.heartbeat_monitor import HeartbeatMonitor
             self._heartbeat = HeartbeatMonitor()
-            # Register the API endpoint as a monitored node
-            self._heartbeat.register_node("api-server", "http://localhost:8000/health")
+            import os
+            api_host = os.getenv("API_HOST", "api") # In docker, it's 'api', locally it's 'localhost'
+            # Or simpler:
+            api_base = os.getenv("API_URL", "http://api:8000")
+            self._heartbeat.register_node("api-server", f"{api_base}/health")
             self._heartbeat.on_status_change(self._on_node_status_change)
-            logger.info(f"[{self.node_id}] Heartbeat monitor initialised")
         except Exception as exc:
             logger.warning(f"[{self.node_id}] Heartbeat monitor unavailable: {exc}")
             self._heartbeat = None
@@ -268,7 +241,7 @@ class FaultTolerantConsumer:
         )
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEMBER 2  DAY 1  ▸  PUSH THIS BLOCK
+    # MEMBER 2  DAY 1  
     # KafkaConsumer factory — key settings for replication and fault tolerance
     # ─────────────────────────────────────────────────────────────────────────
     def _build_consumer(self) -> KafkaConsumer:
@@ -299,7 +272,7 @@ class FaultTolerantConsumer:
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEMBER 2  DAY 2  ▸  PUSH THIS BLOCK
+    # MEMBER 2  DAY 2 
     # Partition assignment callback + message processor
     # ─────────────────────────────────────────────────────────────────────────
     def _on_partitions_assigned(self, partitions):
@@ -345,7 +318,7 @@ class FaultTolerantConsumer:
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEMBER 4  DAY 3  ▸  PUSH THIS BLOCK
+    # MEMBER 4  DAY 3 
     # Leader election background thread — runs every 25 seconds
     # ─────────────────────────────────────────────────────────────────────────
     def _leader_loop(self):
@@ -364,7 +337,7 @@ class FaultTolerantConsumer:
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
-    # MEMBER 2  DAY 3  ▸  PUSH THIS BLOCK
+    # MEMBER 2  DAY 3  
     # MEMBER 4  DAY 4  ▸  ADD the leader thread lines (marked below)
     # Main consumer loop with auto-reconnect on any failure
     # ─────────────────────────────────────────────────────────────────────────
@@ -389,10 +362,7 @@ class FaultTolerantConsumer:
         while self.running:
             try:
                 self.consumer = self._build_consumer()
-                self.consumer.subscribe(
-                    [KAFKA_TOPIC_MESSAGES],
-                    on_assign=lambda c, p: self._on_partitions_assigned(p),
-                )
+                self.consumer.subscribe([KAFKA_TOPIC_MESSAGES])
                 logger.info(f"[{self.node_id}] Connected to Kafka. Polling …")
 
                 for message in self.consumer:
@@ -446,7 +416,7 @@ class FaultTolerantConsumer:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MEMBER 2  DAY 4  ▸  PUSH THIS BLOCK
+# MEMBER 2  DAY 4  
 # Entry point — docker consumer.Dockerfile calls this via python -m
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":

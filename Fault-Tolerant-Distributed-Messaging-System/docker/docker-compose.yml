@@ -1,23 +1,4 @@
-# =============================================================================
-#  MEMBER 4 — INTEGRATION (Docker orchestration)
 
-
-# =============================================================================
-#
-# PUSH SCHEDULE (Member 4 — Docker)
-# -----------------------------------
-# Day 1  ▸  Single-broker Kafka + Zookeeper + MongoDB + Kafdrop
-# Day 2  ▸  Add API and Consumer services with healthchecks
-# Day 3  ▸  Expand to 3-broker Kafka cluster for quorum replication
-# Day 4  ▸  Set replication.factor=3, min.insync.replicas=2
-# Day 5  ▸  Final integration test: scale consumers, verify replication
-#
-
-
-
-
-
-# =============================================================================
 
 # ─────────────────────────────────────────────────────────────────────────────
 # QUORUM-BASED REPLICATION STRATEGY (Part 2: Data Replication)
@@ -58,7 +39,7 @@ services:
       - "2181:2181"
 
   # ─────────────────────────────────────────────────────────────────────────
-  # DAY 3 — Broker 1 (leader)
+  # DAY 3   — Broker 1 (leader)
   # ─────────────────────────────────────────────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -85,7 +66,7 @@ services:
       retries: 5
 
   # ─────────────────────────────────────────────────────────────────────────
-  # DAY 3 — Broker 2 (follower / backup replica)
+  # DAY 3  — Broker 2 (follower / backup replica)
   # Second broker in the cluster.  Kafka automatically assigns it as a
   # follower for partitions led by broker 1 and as a leader for partitions
   # assigned to it by the controller.
@@ -114,7 +95,7 @@ services:
       retries: 5
 
   # ─────────────────────────────────────────────────────────────────────────
-  # DAY 3 — Broker 3 (follower / backup replica)
+  # DAY 3  Broker 3 (follower / backup replica)
   # Third broker completes the 3-broker quorum cluster.
   # With 3 brokers the cluster can tolerate 1 broker failure and still
   # satisfy min.insync.replicas=2 for all write operations.
