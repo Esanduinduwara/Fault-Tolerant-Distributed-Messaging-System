@@ -1,3 +1,13 @@
+""" Configuration Module
+"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DAY 1  ▸  MEMBER 4 pushes this FIRST — all other members need it to import
+# Central config: all connection strings and constants live here.
+# No other file ever hardcodes "localhost:9092" or "mongodb://..." directly.
+# ─────────────────────────────────────────────────────────────────────────────
+# Central config: all connection strings and constants live here.
+# ─────────────────────────────────────────────────────────────────────────────
 import os
 from dotenv import load_dotenv
 

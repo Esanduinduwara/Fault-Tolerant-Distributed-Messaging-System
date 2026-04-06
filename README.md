@@ -8,6 +8,15 @@
 
 ---
 
+
+Member 1- (IT24101526) Fault Tolerance & Message Recovery
+Member 2 - (IT24103215) Data Replication & Consistency
+Member 3 - (IT24103715) Time Synchronization & Message Ordering
+Member 4 - (IT24100315) Consensus Algorithms & System Integration
+
+
+
+
 ## 📐 Architecture
 
 ```
