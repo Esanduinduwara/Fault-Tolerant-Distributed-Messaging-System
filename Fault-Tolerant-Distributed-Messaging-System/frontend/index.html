@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamFlow Messenger</title>
+    <!-- Google Fonts for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Registration / Login Modal -->
+    <div id="auth-modal" class="modal-overlay">
+        <div class="modal-content glass-panel">
+            <h2>Welcome to StreamFlow</h2>
+            <p>Enter your details to join the network.</p>
+            
+            <div id="auth-error" class="hidden"></div>
+
+            <form id="auth-form">
+                <div class="input-group">
+                    <label for="userId">User ID (Unique)</label>
+                    <input type="text" id="userId" placeholder="e.g. u001" required autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="e.g. Alice" required autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="alice@example.com" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn-primary">Connect</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Messenger Interface -->
+    <div id="app-container" class="hidden">
+        
+        <!-- Sidebar - Users List -->
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header">
+                <h3>Chats</h3>
+                <div class="user-badge" id="current-user-badge"></div>
+            </div>
+            <div class="users-list" id="users-list">
+                <!-- Users will be populated here via JS -->
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area glass-panel">
+            
+            <!-- Default Empty State -->
+            <div id="empty-state" class="empty-state">
+                <div class="empty-icon">💬</div>
+                <h2>StreamFlow Messenger</h2>
+                <p>Select a user from the sidebar to start a conversation.</p>
+            </div>
+
+            <!-- Active Chat Interface -->
+            <div id="active-chat" class="hidden">
+                <header class="chat-header">
+                    <div class="chat-header-info">
+                        <h3 id="chat-with-username">User</h3>
+                        <span class="status-indicator">● Online (Polling)</span>
+                    </div>
+                </header>
+
+                <div class="messages-container" id="messages-container">
+                    <!-- Messages will be populated here via JS -->
+                </div>
+
+                <footer class="chat-input-area">
+                    <form id="message-form">
+                        <input type="text" id="message-input" placeholder="Type a message..." required autocomplete="off">
+                        <button type="submit" class="btn-send">Send</button>
+                    </form>
+                </footer>
+            </div>
+            
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
